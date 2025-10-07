@@ -18,23 +18,39 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Story mode configurations with different lengths
 const storyModes = {
   full: {
-    normal: "You are a masterful storyteller. Generate a COMPLETE story from beginning to end with vivid descriptions, compelling characters, and a satisfying conclusion. The story should be 15-20 sentences long, covering the full narrative arc.",
-    twist: "You are an unpredictable storyteller. Generate a COMPLETE story with surprising plot twists and unexpected revelations. The story should be 15-20 sentences long with a shocking ending.",
-    emotional: "You are a heartfelt storyteller. Generate a COMPLETE emotional story focused on deep feelings, relationships, and personal growth. The story should be 15-20 sentences long with a touching resolution.",
-    scary: "You are a horror storyteller. Generate a COMPLETE horror story with building tension, eerie descriptions, and a terrifying climax. The story should be 15-20 sentences long."
+    normal: "You are a masterful storyteller. Generate a COMPLETE story from beginning to end with vivid descriptions, compelling characters, and a satisfying conclusion. The story should cover the full narrative arc.",
+    twist: "You are an unpredictable storyteller. Generate a COMPLETE story with surprising plot twists and unexpected revelations. Include a shocking ending.",
+    emotional: "You are a heartfelt storyteller. Generate a COMPLETE emotional story focused on deep feelings, relationships, and personal growth with a touching resolution.",
+    scary: "You are a horror storyteller. Generate a COMPLETE horror story with building tension, eerie descriptions, and a terrifying climax."
   },
   parts: {
-    normal: "You are a masterful storyteller. Generate engaging, detailed narratives with vivid descriptions. Each response should be 5-7 sentences that advance the story, leaving room for continuation.",
-    twist: "You are an unpredictable storyteller. Add unexpected elements and surprises. Each response should be 5-7 sentences with intriguing cliffhangers.",
-    emotional: "You are a heartfelt storyteller. Focus on deep emotions and character development. Each response should be 5-7 sentences with emotional depth.",
-    scary: "You are a horror storyteller. Build tension and create suspense. Each response should be 5-7 sentences with eerie atmosphere."
+    normal: "You are a masterful storyteller. Generate engaging, detailed narratives with vivid descriptions. Each response should advance the story, leaving room for continuation.",
+    twist: "You are an unpredictable storyteller. Add unexpected elements and surprises with intriguing cliffhangers.",
+    emotional: "You are a heartfelt storyteller. Focus on deep emotions and character development with emotional depth.",
+    scary: "You are a horror storyteller. Build tension and create suspense with eerie atmosphere."
   },
   interactive: {
-    normal: "You are an interactive storyteller. Generate story segments that invite reader participation. Each response should be 5-7 sentences ending with questions or choices for the reader.",
-    twist: "You are an interactive storyteller with surprises. Create story segments with unexpected turns and reader choices. Each response should be 5-7 sentences.",
-    emotional: "You are an interactive emotional storyteller. Create touching moments that invite reader reflection. Each response should be 5-7 sentences with emotional prompts.",
-    scary: "You are an interactive horror storyteller. Build suspense with choices that affect the outcome. Each response should be 5-7 sentences with tense decision points."
+    normal: "You are an interactive storyteller. Generate story segments that invite reader participation ending with questions or choices for the reader.",
+    twist: "You are an interactive storyteller with surprises. Create story segments with unexpected turns and reader choices.",
+    emotional: "You are an interactive emotional storyteller. Create touching moments that invite reader reflection with emotional prompts.",
+    scary: "You are an interactive horror storyteller. Build suspense with choices that affect the outcome with tense decision points."
   }
+};
+
+// Age-appropriate vocabulary and complexity
+const AGE_INSTRUCTIONS = {
+  kids: "Use simple vocabulary appropriate for 5-10 year olds. Use short, clear sentences. Keep themes fun and lighthearted. Avoid complex concepts.",
+  teens: "Use vocabulary appropriate for 11-17 year olds. Include relatable themes and moderate complexity. Balance entertainment with some depth.",
+  adults: "Use sophisticated vocabulary and complex sentence structures. Include mature themes and deeper concepts as appropriate."
+};
+
+// Length instructions based on slider value (1-5)
+const LENGTH_INSTRUCTIONS = {
+  1: "Generate a very short story of 3-5 sentences.",
+  2: "Generate a short story of 5-8 sentences.",
+  3: "Generate a medium-length story of 8-12 sentences.",
+  4: "Generate a long story of 12-16 sentences.",
+  5: "Generate a very long story of 16-20 sentences."
 };
 
 // Language to voice mapping for Murf API
@@ -184,12 +200,13 @@ app.prepare().then(() => {
 
     socket.on("start-story", async (data) => {
       try {
-        const { transcript, mode, generationMode, language, voiceSettings } = data;
+        const { transcript, mode, generationMode, language, ageGroup, storyLength, voiceSettings } = data;
         
         const languageName = getLanguageName(language || 'en-US');
         
         console.log(`\n📝 Received: "${transcript}"`);
         console.log(`📖 Mode: ${mode} | Generation: ${generationMode} | Language: ${languageName}`);
+        console.log(`👥 Age: ${ageGroup} | Length: ${storyLength}`);
         console.log(`🎤 Voice: ${voiceSettings.voiceId} | Speed: ${voiceSettings.speed} | Pitch: ${voiceSettings.pitch}`);
         
         // Get or create chat session
@@ -198,9 +215,12 @@ app.prepare().then(() => {
         if (!chat) {
           console.log("🆕 Creating new chat session...");
           
-          // Add language instruction to system prompt
+          // Build comprehensive system instruction
           const baseInstruction = storyModes[generationMode][mode];
-          const systemInstruction = `${baseInstruction} IMPORTANT: Generate the story in ${languageName} language.`;
+          const ageInstruction = AGE_INSTRUCTIONS[ageGroup || 'adults'];
+          const lengthInstruction = LENGTH_INSTRUCTIONS[storyLength || 3];
+          
+          const systemInstruction = `${baseInstruction} ${ageInstruction} ${lengthInstruction} IMPORTANT: Generate the story in ${languageName} language.`;
           
           let model;
           for (const modelName of MODELS) {
@@ -213,10 +233,16 @@ app.prepare().then(() => {
                 }
               });
               
+              // Adjust token limit based on length
+              const maxTokens = storyLength === 5 ? 1200 : 
+                               storyLength === 4 ? 900 : 
+                               storyLength === 3 ? 600 : 
+                               storyLength === 2 ? 400 : 300;
+              
               chat = model.startChat({
                 history: [],
                 generationConfig: {
-                  maxOutputTokens: generationMode === 'full' ? 1000 : 500,
+                  maxOutputTokens: maxTokens,
                   temperature: 0.8,
                 }
               });
@@ -280,7 +306,7 @@ app.prepare().then(() => {
     // Continue story handler (for parts/interactive mode)
     socket.on("continue-story", async (data) => {
       try {
-        const { mode, language, voiceSettings } = data;
+        const { mode, language, ageGroup, storyLength, voiceSettings } = data;
         const chat = chatSessions.get(socket.id);
         
         if (!chat) {

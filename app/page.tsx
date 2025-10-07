@@ -8,6 +8,9 @@ import AudioPlayer from "./components/AudioPlayer";
 import VoiceSettings from "./components/VoiceSettings";
 import StoryModeDropdown from "./components/StoryModeDropdown";
 import LanguageSelector from "./components/LanguageSelector";
+import ExportButtons from "./components/ExportButtons";
+import AgeGroupSelector from "./components/AgeGroupSelector";
+import StoryLengthSlider from "./components/StoryLengthSlider";
 import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff } from "lucide-react";
 
 export default function Home() {
@@ -31,6 +34,10 @@ export default function Home() {
   
   // Language
   const [selectedLanguage, setSelectedLanguage] = useState("en-US");
+  
+  // Age group and length
+  const [ageGroup, setAgeGroup] = useState<"kids" | "teens" | "adults">("adults");
+  const [storyLength, setStoryLength] = useState(3); // 1-5 scale
   
   // Preview audio
   const [previewAudioUrl, setPreviewAudioUrl] = useState("");
@@ -108,7 +115,6 @@ export default function Home() {
         recognition.interimResults = false;
         
         // Set recognition language based on selected language
-        const langCode = selectedLanguage.split('-')[0]; // e.g., 'en' from 'en-US'
         recognition.lang = selectedLanguage;
 
         recognition.onresult = (event: any) => {
@@ -164,6 +170,8 @@ export default function Home() {
       mode: mode,
       generationMode: storyGenerationMode,
       language: selectedLanguage,
+      ageGroup: ageGroup,
+      storyLength: storyLength,
       voiceSettings: {
         voiceId: selectedVoice,
         speed: voiceSpeed,
@@ -190,6 +198,8 @@ export default function Home() {
     socket.emit("continue-story", {
       mode: mode,
       language: selectedLanguage,
+      ageGroup: ageGroup,
+      storyLength: storyLength,
       voiceSettings: {
         voiceId: selectedVoice,
         speed: voiceSpeed,
@@ -253,6 +263,12 @@ export default function Home() {
 
         {/* Mode Selector */}
         <ModeSelector mode={mode} setMode={setMode} />
+
+        {/* Age Group Selector */}
+        <AgeGroupSelector value={ageGroup} onChange={setAgeGroup} />
+
+        {/* Story Length Slider */}
+        <StoryLengthSlider value={storyLength} onChange={setStoryLength} />
 
         {/* Voice Settings */}
         <VoiceSettings 
@@ -350,6 +366,13 @@ export default function Home() {
 
         {/* Story Display */}
         <StoryDisplay storyText={storyText} isLoading={isLoading} />
+
+        {/* Export Buttons */}
+        <ExportButtons 
+          storyText={storyText} 
+          audioUrl={audioUrl}
+          storyTitle="My Story"
+        />
 
         {/* Continue Button (for parts/interactive mode) */}
         {storyText && storyGenerationMode !== "full" && !isLoading && (
