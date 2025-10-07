@@ -1,13 +1,17 @@
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: process.env.NODE_ENV === 'production' ? '.env' : '.env.local' });
 
 const { createServer } = require("node:http");
 const next = require("next");
 const { Server } = require("socket.io");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+// Auto-detect environment
 const dev = process.env.NODE_ENV !== "production";
-const hostname = "localhost";
-const port = 3000;
+const isProduction = process.env.NODE_ENV === "production";
+
+// Smart hostname and port detection
+const hostname = isProduction ? "0.0.0.0" : "localhost"; // 0.0.0.0 for production, localhost for dev
+const port = parseInt(process.env.PORT || "3000", 10);
 
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
@@ -186,11 +190,22 @@ async function generateMurfVoice(text, voiceSettings) {
 app.prepare().then(() => {
   const httpServer = createServer(handler);
   
+  // Dynamic CORS based on environment
+  const corsOrigin = isProduction 
+    ? "*" // In production, allow all (or specify your domain)
+    : ["http://localhost:3000", "http://127.0.0.1:3000"]; // In dev, localhost only
+  
+  // Socket.IO with environment-aware CORS
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
+      origin: corsOrigin,
+      methods: ["GET", "POST"],
+      credentials: true,
+      allowedHeaders: ["*"]
+    },
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
 
   io.on("connection", (socket) => {
@@ -379,10 +394,14 @@ app.prepare().then(() => {
       console.error("❌ Server error:", err);
       process.exit(1);
     })
-    .listen(port, () => {
+    .listen(port, hostname, () => {
       console.log(`\n🚀 Server ready on http://${hostname}:${port}`);
       console.log(`📡 Socket.IO ready`);
       console.log(`🤖 Gemini AI with fallback models enabled`);
-      console.log(`🌍 Multi-language support enabled\n`);
+      console.log(`🌍 Multi-language support enabled`);
+      console.log(`🔥 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+      console.log(`🌐 Hostname: ${hostname}`);
+      console.log(`🔌 Port: ${port}`);
+      console.log(`🔐 CORS: ${JSON.stringify(corsOrigin)}\n`);
     });
 });
