@@ -8,32 +8,45 @@ An AI-powered web application that transforms text prompts into fully narrated s
 
 ## Screenshots
 
-<div align="center">
-
 ### Main Dashboard
-![Main Dashboard](./screenshots/dashboard.png)
-*Complete story creation interface with mode selection, age groups, and customization options*
-
-### Language Selection
-![Language Selection](./screenshots/language-selection.png)
-*Choose from 10 supported languages with searchable dropdown interface*
-
-### Voice Settings & Preview
-![Voice Settings](./screenshots/voice-settings.png)
-*Customize voice, speed, and pitch with live preview functionality*
-
-### Story History
-![Story History](./screenshots/history-sidebar.png)
-*Access all saved stories with favorites filter and quick load options*
-
-### Export Options
-![Export Options](./screenshots/export-options.png)
-*Download generated stories as PDF, TXT, or MP3 audio files*
-
-</div>
+<p align="center">
+  <img src="./screenshots/dashboard.png" alt="Main Dashboard" width="900">
+</p>
+<p align="center"><i>Complete story creation interface with mode selection, age groups, and customization options</i></p>
 
 ---
 
+### Language Selection
+<p align="center">
+  <img src="./screenshots/language-selection.png" alt="Language Selection" width="900">
+</p>
+<p align="center"><i>Choose from 10 supported languages with searchable dropdown interface</i></p>
+
+---
+
+### Voice Settings & Preview
+<p align="center">
+  <img src="./screenshots/voice-settings.png" alt="Voice Settings" width="900">
+</p>
+<p align="center"><i>Customize voice, speed, and pitch with live preview functionality</i></p>
+
+---
+
+### Story History
+<p align="center">
+  <img src="./screenshots/history-sidebar.png" alt="Story History" width="900">
+</p>
+<p align="center"><i>Access all saved stories with favorites filter and quick load options</i></p>
+
+---
+
+### Export Options
+<p align="center">
+  <img src="./screenshots/export-options.png" alt="Export Options" width="900">
+</p>
+<p align="center"><i>Download generated stories as PDF, TXT, or MP3 audio files</i></p>
+
+---
 
 ## Features
 
