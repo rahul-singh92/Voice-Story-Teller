@@ -15,26 +15,32 @@ const handler = app.getRequestHandler();
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Story mode configurations
+// Story mode configurations with different lengths
 const storyModes = {
-  normal: "You are a masterful storyteller. Generate engaging, detailed, family-friendly narratives with vivid descriptions and compelling characters. Each response should be 6-8 sentences that significantly advance the story.",
-  twist: "You are an unpredictable storyteller. Add unexpected plot twists and surprise elements. Use energetic language and sudden revelations. Each response should be 6-8 sentences.",
-  emotional: "You are a heartfelt storyteller. Focus on deep emotions, character development, and touching moments. Use poetic, moving language. Each response should be 6-8 sentences.",
-  scary: "You are a horror storyteller. Build tension, create suspense, and use eerie descriptions. Keep readers on edge with dark imagery. Each response should be 6-8 sentences."
-};
-
-// Voice configurations for Murf
-const voiceConfigs = {
-  normal: { voiceId: 'en-US-ryan', pitch: 0, speed: 0 },
-  twist: { voiceId: 'en-US-terrell', pitch: 10, speed: 10 },
-  emotional: { voiceId: 'en-US-natalie', pitch: -10, speed: -10 },
-  scary: { voiceId: 'en-US-clint', pitch: -15, speed: -15 }
+  full: {
+    normal: "You are a masterful storyteller. Generate a COMPLETE story from beginning to end with vivid descriptions, compelling characters, and a satisfying conclusion. The story should be 15-20 sentences long, covering the full narrative arc.",
+    twist: "You are an unpredictable storyteller. Generate a COMPLETE story with surprising plot twists and unexpected revelations. The story should be 15-20 sentences long with a shocking ending.",
+    emotional: "You are a heartfelt storyteller. Generate a COMPLETE emotional story focused on deep feelings, relationships, and personal growth. The story should be 15-20 sentences long with a touching resolution.",
+    scary: "You are a horror storyteller. Generate a COMPLETE horror story with building tension, eerie descriptions, and a terrifying climax. The story should be 15-20 sentences long."
+  },
+  parts: {
+    normal: "You are a masterful storyteller. Generate engaging, detailed narratives with vivid descriptions. Each response should be 5-7 sentences that advance the story, leaving room for continuation.",
+    twist: "You are an unpredictable storyteller. Add unexpected elements and surprises. Each response should be 5-7 sentences with intriguing cliffhangers.",
+    emotional: "You are a heartfelt storyteller. Focus on deep emotions and character development. Each response should be 5-7 sentences with emotional depth.",
+    scary: "You are a horror storyteller. Build tension and create suspense. Each response should be 5-7 sentences with eerie atmosphere."
+  },
+  interactive: {
+    normal: "You are an interactive storyteller. Generate story segments that invite reader participation. Each response should be 5-7 sentences ending with questions or choices for the reader.",
+    twist: "You are an interactive storyteller with surprises. Create story segments with unexpected turns and reader choices. Each response should be 5-7 sentences.",
+    emotional: "You are an interactive emotional storyteller. Create touching moments that invite reader reflection. Each response should be 5-7 sentences with emotional prompts.",
+    scary: "You are an interactive horror storyteller. Build suspense with choices that affect the outcome. Each response should be 5-7 sentences with tense decision points."
+  }
 };
 
 // Store chat sessions
 const chatSessions = new Map();
 
-// Available models to try (in order of preference)
+// Available models to try
 const MODELS = [
   'gemini-2.0-flash-exp',
   'gemini-1.5-flash',
@@ -70,14 +76,12 @@ async function generateWithFallback(chatOrModel, message) {
     try {
       console.log(`🔄 Trying model: ${modelName}`);
       
-      // If chat exists, use it; otherwise create new model
       if (chatOrModel.sendMessage) {
         return await retryWithBackoff(async () => {
           const result = await chatOrModel.sendMessage(message);
           return await result.response;
         });
       } else {
-        // Create new model and generate
         const model = genAI.getGenerativeModel({ model: modelName });
         return await retryWithBackoff(async () => {
           const result = await model.generateContent(message);
@@ -95,9 +99,7 @@ async function generateWithFallback(chatOrModel, message) {
 }
 
 // Murf API function
-async function generateMurfVoice(text, mode) {
-  const config = voiceConfigs[mode];
-  
+async function generateMurfVoice(text, voiceSettings) {
   try {
     const response = await fetch('https://api.murf.ai/v1/speech/generate', {
       method: 'POST',
@@ -108,12 +110,12 @@ async function generateMurfVoice(text, mode) {
       },
       body: JSON.stringify({
         text: text,
-        voiceId: config.voiceId,
+        voiceId: voiceSettings.voiceId,
         format: 'MP3',
         sampleRate: 24000,
         channelType: 'STEREO',
-        pitch: config.pitch,
-        speed: config.speed,
+        pitch: voiceSettings.pitch,
+        speed: voiceSettings.speed,
         model: 'GEN2'
       })
     });
@@ -149,9 +151,11 @@ app.prepare().then(() => {
 
     socket.on("start-story", async (data) => {
       try {
-        const { transcript, mode } = data;
+        const { transcript, mode, generationMode, voiceSettings } = data;
         
-        console.log(`\n📝 Received: "${transcript}" | Mode: ${mode}`);
+        console.log(`\n📝 Received: "${transcript}"`);
+        console.log(`📖 Mode: ${mode} | Generation: ${generationMode}`);
+        console.log(`🎤 Voice: ${voiceSettings.voiceId} | Speed: ${voiceSettings.speed} | Pitch: ${voiceSettings.pitch}`);
         
         // Get or create chat session
         let chat = chatSessions.get(socket.id);
@@ -159,7 +163,9 @@ app.prepare().then(() => {
         if (!chat) {
           console.log("🆕 Creating new chat session...");
           
-          // Try to create chat with first available model
+          // Select system instruction based on generation mode
+          const systemInstruction = storyModes[generationMode][mode];
+          
           let model;
           for (const modelName of MODELS) {
             try {
@@ -167,14 +173,14 @@ app.prepare().then(() => {
                 model: modelName,
                 systemInstruction: {
                   role: "system",
-                  parts: [{ text: storyModes[mode] }]
+                  parts: [{ text: systemInstruction }]
                 }
               });
               
               chat = model.startChat({
                 history: [],
                 generationConfig: {
-                  maxOutputTokens: 500,
+                  maxOutputTokens: generationMode === 'full' ? 1000 : 500,
                   temperature: 0.8,
                 }
               });
@@ -194,7 +200,7 @@ app.prepare().then(() => {
           chatSessions.set(socket.id, chat);
         }
 
-        // Generate story with retry and fallback
+        // Generate story
         console.log("🤖 Generating story...");
         const response = await generateWithFallback(chat, transcript);
         const storyText = response.text();
@@ -206,14 +212,13 @@ app.prepare().then(() => {
 
         // Generate voice
         console.log("🎤 Generating voice...");
-        const audioUrl = await generateMurfVoice(storyText, mode);
+        const audioUrl = await generateMurfVoice(storyText, voiceSettings);
         console.log("✅ Audio ready");
         socket.emit("audio-ready", { audioUrl });
 
       } catch (error) {
         console.error("❌ Error:", error);
         
-        // User-friendly error messages
         let errorMessage = "An error occurred while generating your story.";
         
         if (error.message?.includes('overloaded') || error.message?.includes('503')) {
@@ -225,6 +230,55 @@ app.prepare().then(() => {
         }
         
         socket.emit("error", { message: errorMessage });
+      }
+    });
+
+    // Continue story handler (for parts/interactive mode)
+    socket.on("continue-story", async (data) => {
+      try {
+        const { mode, voiceSettings } = data;
+        const chat = chatSessions.get(socket.id);
+        
+        if (!chat) {
+          socket.emit("error", { message: "No active story session" });
+          return;
+        }
+
+        console.log("➡️ Continuing story...");
+        
+        const response = await generateWithFallback(chat, "Continue the story from where you left off.");
+        const storyText = response.text();
+        
+        console.log("✅ Story continued");
+        
+        socket.emit("story-text", { text: storyText });
+        
+        const audioUrl = await generateMurfVoice(storyText, voiceSettings);
+        socket.emit("audio-ready", { audioUrl });
+        
+      } catch (error) {
+        console.error("❌ Error:", error);
+        socket.emit("error", { message: "Could not continue story" });
+      }
+    });
+
+    // Preview voice handler
+    socket.on("preview-voice", async (data) => {
+      try {
+        const { voiceSettings } = data;
+        
+        console.log(`\n🎤 Preview request: ${voiceSettings.voiceId}`);
+        
+        const previewText = "Hey there! I'm your story teller and I will narrate different stories with your customization. Let's create something amazing together!";
+        
+        const audioUrl = await generateMurfVoice(previewText, voiceSettings);
+        console.log("✅ Preview audio ready");
+        
+        socket.emit("preview-ready", { audioUrl });
+        
+      } catch (error) {
+        console.error("❌ Preview error:", error);
+        socket.emit("error", { message: "Could not generate voice preview" });
       }
     });
 

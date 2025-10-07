@@ -5,6 +5,8 @@ import { socket } from "./lib/socket";
 import StoryDisplay from "./components/StoryDisplay";
 import ModeSelector from "./components/ModeSelector";
 import AudioPlayer from "./components/AudioPlayer";
+import VoiceSettings from "./components/VoiceSettings";
+import StoryModeDropdown from "./components/StoryModeDropdown";
 import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff } from "lucide-react";
 
 export default function Home() {
@@ -17,6 +19,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [textInput, setTextInput] = useState("");
+  
+  // Voice settings
+  const [selectedVoice, setSelectedVoice] = useState("en-US-ryan");
+  const [voiceSpeed, setVoiceSpeed] = useState(0);
+  const [voicePitch, setVoicePitch] = useState(0);
+  
+  // Story generation mode
+  const [storyGenerationMode, setStoryGenerationMode] = useState<"full" | "parts" | "interactive">("full");
+  
+  // Preview audio
+  const [previewAudioUrl, setPreviewAudioUrl] = useState("");
+  const previewAudioRef = useRef<HTMLAudioElement>(null);
   
   const recognitionRef = useRef<any>(null);
 
@@ -44,6 +58,10 @@ export default function Home() {
       setAudioUrl(data.audioUrl);
     }
 
+    function onPreviewReady(data: { audioUrl: string }) {
+      setPreviewAudioUrl(data.audioUrl);
+    }
+
     function onError(data: { message: string }) {
       setError(data.message);
       setIsLoading(false);
@@ -53,6 +71,7 @@ export default function Home() {
     socket.on("disconnect", onDisconnect);
     socket.on("story-text", onStoryText);
     socket.on("audio-ready", onAudioReady);
+    socket.on("preview-ready", onPreviewReady);
     socket.on("error", onError);
 
     return () => {
@@ -60,9 +79,18 @@ export default function Home() {
       socket.off("disconnect", onDisconnect);
       socket.off("story-text", onStoryText);
       socket.off("audio-ready", onAudioReady);
+      socket.off("preview-ready", onPreviewReady);
       socket.off("error", onError);
     };
   }, []);
+
+  // Auto-play preview audio
+  useEffect(() => {
+    if (previewAudioUrl && previewAudioRef.current) {
+      previewAudioRef.current.src = previewAudioUrl;
+      previewAudioRef.current.play();
+    }
+  }, [previewAudioUrl]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -127,8 +155,37 @@ export default function Home() {
     socket.emit("start-story", {
       transcript: text,
       mode: mode,
+      generationMode: storyGenerationMode,
+      voiceSettings: {
+        voiceId: selectedVoice,
+        speed: voiceSpeed,
+        pitch: voicePitch
+      }
     });
     setTextInput("");
+  };
+
+  const handlePreviewVoice = (voiceId: string, speed: number, pitch: number) => {
+    console.log("🎤 Previewing voice:", voiceId);
+    socket.emit("preview-voice", {
+      voiceSettings: {
+        voiceId: voiceId,
+        speed: speed,
+        pitch: pitch
+      }
+    });
+  };
+
+  const continueStory = () => {
+    setIsLoading(true);
+    socket.emit("continue-story", {
+      mode: mode,
+      voiceSettings: {
+        voiceId: selectedVoice,
+        speed: voiceSpeed,
+        pitch: voicePitch
+      }
+    });
   };
 
   const resetStory = () => {
@@ -177,8 +234,22 @@ export default function Home() {
         {/* Mode Selector */}
         <ModeSelector mode={mode} setMode={setMode} />
 
+        {/* Voice Settings */}
+        <VoiceSettings 
+          voice={selectedVoice}
+          setVoice={setSelectedVoice}
+          speed={voiceSpeed}
+          setSpeed={setVoiceSpeed}
+          pitch={voicePitch}
+          setPitch={setVoicePitch}
+          onPreviewVoice={handlePreviewVoice}
+        />
+
+        {/* Hidden Preview Audio Player */}
+        <audio ref={previewAudioRef} className="hidden" />
+
         {/* Input Section */}
-        <div className="mb-8">
+        <div className="mb-8 relative z-10">
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-stretch gap-3 bg-gray-900/50 backdrop-blur-sm rounded-2xl border border-purple-500/20 p-3 shadow-2xl">
               <input
@@ -207,6 +278,13 @@ export default function Home() {
                 )}
               </button>
 
+              {/* Story Generation Mode Dropdown */}
+              <StoryModeDropdown
+                value={storyGenerationMode}
+                onChange={setStoryGenerationMode}
+                disabled={isLoading}
+              />
+
               <button
                 type="submit"
                 disabled={isLoading || !textInput.trim()}
@@ -234,7 +312,7 @@ export default function Home() {
 
         {/* Transcript Display */}
         {transcript && (
-          <div className="mb-6 p-5 bg-gray-900/50 backdrop-blur-sm rounded-xl border border-purple-500/20 animate-fade-in">
+          <div className="mb-6 p-5 bg-gray-900/50 backdrop-blur-sm rounded-xl border border-purple-500/20 animate-fade-in relative z-0">
             <p className="text-xs text-purple-400 mb-2 font-semibold uppercase tracking-wider">Your Request</p>
             <p className="text-white text-base md:text-lg">{transcript}</p>
           </div>
@@ -242,7 +320,7 @@ export default function Home() {
 
         {/* Error Display */}
         {error && (
-          <div className="mb-6 p-5 bg-red-950/30 backdrop-blur-sm rounded-xl border border-red-500/30 animate-fade-in">
+          <div className="mb-6 p-5 bg-red-950/30 backdrop-blur-sm rounded-xl border border-red-500/30 animate-fade-in relative z-0">
             <p className="text-red-400">{error}</p>
           </div>
         )}
@@ -253,9 +331,22 @@ export default function Home() {
         {/* Story Display */}
         <StoryDisplay storyText={storyText} isLoading={isLoading} />
 
+        {/* Continue Button (for parts/interactive mode) */}
+        {storyText && storyGenerationMode !== "full" && !isLoading && (
+          <div className="text-center mt-6">
+            <button
+              onClick={continueStory}
+              className="px-8 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg shadow-purple-600/30 inline-flex items-center gap-3"
+            >
+              <Send className="w-5 h-5" />
+              <span>Continue Story</span>
+            </button>
+          </div>
+        )}
+
         {/* Reset Button */}
         {storyText && (
-          <div className="text-center mt-8">
+          <div className="text-center mt-4">
             <button
               onClick={resetStory}
               className="px-8 py-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg inline-flex items-center gap-3"
