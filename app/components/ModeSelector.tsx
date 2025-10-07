@@ -1,17 +1,17 @@
 "use client";
 
-import { Book, Drama, Heart, Ghost } from "lucide-react";
+import { Sparkles, Zap, Heart, Ghost } from "lucide-react";
 
 interface ModeSelectorProps {
   mode: "normal" | "twist" | "emotional" | "scary";
   setMode: (mode: "normal" | "twist" | "emotional" | "scary") => void;
 }
 
-const modes = [
-  { id: "normal", label: "Normal", icon: Book, color: "blue" },
-  { id: "twist", label: "Twist", icon: Drama, color: "yellow" },
-  { id: "emotional", label: "Emotional", icon: Heart, color: "pink" },
-  { id: "scary", label: "Scary", icon: Ghost, color: "red" },
+const MODES = [
+  { id: "normal" as const, label: "Normal", icon: Sparkles, color: "text-blue-400" },
+  { id: "twist" as const, label: "Twist", icon: Zap, color: "text-yellow-400" },
+  { id: "emotional" as const, label: "Emotional", icon: Heart, color: "text-pink-400" },
+  { id: "scary" as const, label: "Scary", icon: Ghost, color: "text-red-400" },
 ];
 
 export default function ModeSelector({ mode, setMode }: ModeSelectorProps) {
@@ -20,13 +20,13 @@ export default function ModeSelector({ mode, setMode }: ModeSelectorProps) {
       <p className="text-center text-gray-400 mb-4 text-xs md:text-sm uppercase tracking-wider font-semibold">
         Story Mode
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {modes.map((m) => {
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {MODES.map((m) => {
           const IconComponent = m.icon;
           return (
             <button
               key={m.id}
-              onClick={() => setMode(m.id as any)}
+              onClick={() => setMode(m.id)}
               className={`p-5 md:p-6 rounded-xl border-2 transition-all duration-300 group ${
                 mode === m.id
                   ? "border-purple-500 bg-purple-600/20 scale-105 shadow-lg shadow-purple-600/30"
@@ -34,12 +34,12 @@ export default function ModeSelector({ mode, setMode }: ModeSelectorProps) {
               }`}
             >
               <IconComponent 
-                className={`w-8 h-8 md:w-10 md:h-10 mx-auto mb-3 transition-transform ${
-                  mode === m.id ? "text-purple-400 scale-110" : "text-gray-400 group-hover:scale-105"
-                }`}
+                className={`w-8 h-8 md:w-10 md:h-10 mx-auto mb-3 transition-all ${
+                  mode === m.id ? m.color : "text-gray-500"
+                } ${mode === m.id ? "scale-110" : "group-hover:scale-105"}`}
               />
               <div className={`text-sm md:text-base font-semibold ${
-                mode === m.id ? "text-white" : "text-gray-400"
+                mode === m.id ? "text-white" : "text-gray-400 group-hover:text-gray-300"
               }`}>
                 {m.label}
               </div>

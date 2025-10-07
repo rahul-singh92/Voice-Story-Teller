@@ -11,19 +11,19 @@ interface StoryModeDropdownProps {
 
 const MODES = [
   { 
-    id: "full", 
+    id: "full" as const, 
     label: "Full Story", 
     icon: BookOpen,
     description: "Complete story with ending"
   },
   { 
-    id: "parts", 
+    id: "parts" as const, 
     label: "Some Parts", 
     icon: FileText,
     description: "Story in segments"
   },
   { 
-    id: "interactive", 
+    id: "interactive" as const, 
     label: "Interactive", 
     icon: MessageCircle,
     description: "Story with choices"
@@ -79,7 +79,7 @@ export default function StoryModeDropdown({ value, onChange, disabled }: StoryMo
                 <button
                   key={mode.id}
                   onClick={() => {
-                    onChange(mode.id as any);
+                    onChange(mode.id);
                     setIsOpen(false);
                   }}
                   className={`w-full flex items-start gap-3 p-3 rounded-lg transition-all duration-200 ${

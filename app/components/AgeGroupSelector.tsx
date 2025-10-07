@@ -9,21 +9,21 @@ interface AgeGroupSelectorProps {
 
 const AGE_GROUPS = [
   { 
-    id: "kids", 
+    id: "kids" as const, 
     label: "Kids", 
     icon: Baby,
     age: "5-10",
     description: "Simple & fun"
   },
   { 
-    id: "teens", 
+    id: "teens" as const, 
     label: "Teens", 
     icon: User,
     age: "11-17",
     description: "Engaging & relatable"
   },
   { 
-    id: "adults", 
+    id: "adults" as const, 
     label: "Adults", 
     icon: Users,
     age: "18+",
@@ -43,7 +43,7 @@ export default function AgeGroupSelector({ value, onChange }: AgeGroupSelectorPr
           return (
             <button
               key={group.id}
-              onClick={() => onChange(group.id as any)}
+              onClick={() => onChange(group.id)}
               className={`p-4 rounded-xl border-2 transition-all duration-300 ${
                 value === group.id
                   ? "border-purple-500 bg-purple-600/20 scale-105 shadow-lg shadow-purple-600/30"

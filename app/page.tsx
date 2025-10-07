@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { socket } from "./lib/socket";
 import StoryDisplay from "./components/StoryDisplay";
 import ModeSelector from "./components/ModeSelector";
@@ -15,6 +15,40 @@ import StorySidebar from "./components/StorySidebar";
 import StoryTitleInput from "./components/StoryTitleInput";
 import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff, Save } from "lucide-react";
 import { saveStory, SavedStory } from "./utils/localStorage";
+
+// TypeScript declarations for Speech Recognition
+interface SpeechRecognitionEvent extends Event {
+  results: {
+    [index: number]: {
+      [index: number]: {
+        transcript: string;
+      };
+    };
+    length: number;
+  };
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  start(): void;
+  stop(): void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
 
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
@@ -50,7 +84,7 @@ export default function Home() {
   const [previewAudioUrl, setPreviewAudioUrl] = useState("");
   const previewAudioRef = useRef<HTMLAudioElement>(null);
   
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     if (socket.connected) {
@@ -102,7 +136,7 @@ export default function Home() {
     };
   }, []);
 
-  // Auto-save story when text or audio changes
+  // Auto-save story when text or audio changes (with all dependencies)
   useEffect(() => {
     if (storyText && currentStoryId) {
       const story: SavedStory = {
@@ -115,37 +149,34 @@ export default function Home() {
         ageGroup: ageGroup,
         storyLength: storyLength,
         generationMode: storyGenerationMode,
-        createdAt: currentStoryId, // Using ID as creation timestamp
+        createdAt: currentStoryId,
         updatedAt: new Date().toISOString(),
         favorite: false
       };
       saveStory(story);
     }
-  }, [storyText, audioUrl, storyTitle]);
+  }, [storyText, audioUrl, storyTitle, currentStoryId, mode, selectedLanguage, ageGroup, storyLength, storyGenerationMode]);
 
   // Auto-play preview audio
   useEffect(() => {
     if (previewAudioUrl && previewAudioRef.current) {
       previewAudioRef.current.src = previewAudioUrl;
-      previewAudioRef.current.play();
+      previewAudioRef.current.play().catch(err => console.error("Audio play error:", err));
     }
   }, [previewAudioUrl]);
 
+  // Initialize Speech Recognition
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        
-        // Set recognition language based on selected language
         recognition.lang = selectedLanguage;
 
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
           const transcriptText = event.results[0][0].transcript;
           console.log("✅ Recognized:", transcriptText);
           setTranscript(transcriptText);
@@ -153,7 +184,7 @@ export default function Home() {
           setIsListening(false);
         };
 
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error("Speech recognition error:", event.error);
           setIsListening(false);
           setError("Could not recognize speech. Please try again.");
@@ -168,25 +199,24 @@ export default function Home() {
     }
   }, [selectedLanguage]);
 
-  const startListening = () => {
+  const startListening = useCallback(() => {
     if (recognitionRef.current) {
       setError("");
       recognitionRef.current.start();
       setIsListening(true);
     }
-  };
+  }, []);
 
-  const stopListening = () => {
+  const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
-  };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (textInput.trim() && !isLoading) {
-      // Generate new story ID if starting fresh
       if (!currentStoryId || !storyText) {
         setCurrentStoryId(new Date().toISOString());
       }
@@ -251,18 +281,18 @@ export default function Home() {
     setCurrentStoryId("");
   };
 
-  const handleLoadStory = (story: SavedStory) => {
+  const handleLoadStory = useCallback((story: SavedStory) => {
     setStoryText(story.text);
     setAudioUrl(story.audioUrl);
     setStoryTitle(story.title);
-    setMode(story.mode as any);
+    setMode(story.mode as "normal" | "twist" | "emotional" | "scary");
     setSelectedLanguage(story.language);
-    setAgeGroup(story.ageGroup as any);
+    setAgeGroup(story.ageGroup as "kids" | "teens" | "adults");
     setStoryLength(story.storyLength);
-    setStoryGenerationMode(story.generationMode as any);
+    setStoryGenerationMode(story.generationMode as "full" | "parts" | "interactive");
     setCurrentStoryId(story.id);
     setTranscript(`Continuing story: ${story.title}`);
-  };
+  }, []);
 
   const handleManualSave = () => {
     if (!storyText) {
