@@ -89,8 +89,8 @@ export default function LanguageSelector({ value, onChange, disabled }: Language
             </div>
           </div>
 
-          {/* Language List */}
-          <div className="max-h-80 overflow-y-auto p-2">
+          {/* Language List with Custom Scrollbar */}
+          <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
             {filteredLanguages.length > 0 ? (
               filteredLanguages.map((lang) => {
                 const isSelected = lang.code === value;
@@ -134,6 +134,34 @@ export default function LanguageSelector({ value, onChange, disabled }: Language
           </div>
         </div>
       )}
+
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(31, 41, 55, 0.5);
+          border-radius: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #9333ea 0%, #ec4899 100%);
+          border-radius: 8px;
+          transition: background 0.3s;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #a855f7 0%, #f472b6 100%);
+        }
+
+        /* Firefox */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #9333ea rgba(31, 41, 55, 0.5);
+        }
+      `}</style>
     </div>
   );
 }
