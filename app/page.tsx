@@ -11,7 +11,10 @@ import LanguageSelector from "./components/LanguageSelector";
 import ExportButtons from "./components/ExportButtons";
 import AgeGroupSelector from "./components/AgeGroupSelector";
 import StoryLengthSlider from "./components/StoryLengthSlider";
-import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff } from "lucide-react";
+import StorySidebar from "./components/StorySidebar";
+import StoryTitleInput from "./components/StoryTitleInput";
+import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff, Save } from "lucide-react";
+import { saveStory, SavedStory } from "./utils/localStorage";
 
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
@@ -38,6 +41,10 @@ export default function Home() {
   // Age group and length
   const [ageGroup, setAgeGroup] = useState<"kids" | "teens" | "adults">("adults");
   const [storyLength, setStoryLength] = useState(3); // 1-5 scale
+  
+  // Story title and ID
+  const [storyTitle, setStoryTitle] = useState("");
+  const [currentStoryId, setCurrentStoryId] = useState<string>("");
   
   // Preview audio
   const [previewAudioUrl, setPreviewAudioUrl] = useState("");
@@ -94,6 +101,27 @@ export default function Home() {
       socket.off("error", onError);
     };
   }, []);
+
+  // Auto-save story when text or audio changes
+  useEffect(() => {
+    if (storyText && currentStoryId) {
+      const story: SavedStory = {
+        id: currentStoryId,
+        title: storyTitle || "Untitled Story",
+        text: storyText,
+        audioUrl: audioUrl,
+        mode: mode,
+        language: selectedLanguage,
+        ageGroup: ageGroup,
+        storyLength: storyLength,
+        generationMode: storyGenerationMode,
+        createdAt: currentStoryId, // Using ID as creation timestamp
+        updatedAt: new Date().toISOString(),
+        favorite: false
+      };
+      saveStory(story);
+    }
+  }, [storyText, audioUrl, storyTitle]);
 
   // Auto-play preview audio
   useEffect(() => {
@@ -158,6 +186,10 @@ export default function Home() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (textInput.trim() && !isLoading) {
+      // Generate new story ID if starting fresh
+      if (!currentStoryId || !storyText) {
+        setCurrentStoryId(new Date().toISOString());
+      }
       sendStoryRequest(textInput.trim());
     }
   };
@@ -215,10 +247,59 @@ export default function Home() {
     setTranscript("");
     setError("");
     setTextInput("");
+    setStoryTitle("");
+    setCurrentStoryId("");
+  };
+
+  const handleLoadStory = (story: SavedStory) => {
+    setStoryText(story.text);
+    setAudioUrl(story.audioUrl);
+    setStoryTitle(story.title);
+    setMode(story.mode as any);
+    setSelectedLanguage(story.language);
+    setAgeGroup(story.ageGroup as any);
+    setStoryLength(story.storyLength);
+    setStoryGenerationMode(story.generationMode as any);
+    setCurrentStoryId(story.id);
+    setTranscript(`Continuing story: ${story.title}`);
+  };
+
+  const handleManualSave = () => {
+    if (!storyText) {
+      alert("No story to save!");
+      return;
+    }
+
+    const id = currentStoryId || new Date().toISOString();
+    setCurrentStoryId(id);
+
+    const story: SavedStory = {
+      id: id,
+      title: storyTitle || "Untitled Story",
+      text: storyText,
+      audioUrl: audioUrl,
+      mode: mode,
+      language: selectedLanguage,
+      ageGroup: ageGroup,
+      storyLength: storyLength,
+      generationMode: storyGenerationMode,
+      createdAt: id,
+      updatedAt: new Date().toISOString(),
+      favorite: false
+    };
+    
+    saveStory(story);
+    alert("Story saved successfully!");
   };
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6 md:p-8">
+      {/* Story Sidebar */}
+      <StorySidebar 
+        onLoadStory={handleLoadStory}
+        currentStoryId={currentStoryId}
+      />
+
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-10">
@@ -260,6 +341,13 @@ export default function Home() {
           {/* Divider */}
           <div className="h-px bg-gradient-to-r from-transparent via-purple-500/30 to-transparent"></div>
         </div>
+
+        {/* Story Title Input */}
+        <StoryTitleInput 
+          value={storyTitle}
+          onChange={setStoryTitle}
+          disabled={isLoading}
+        />
 
         {/* Mode Selector */}
         <ModeSelector mode={mode} setMode={setMode} />
@@ -371,31 +459,39 @@ export default function Home() {
         <ExportButtons 
           storyText={storyText} 
           audioUrl={audioUrl}
-          storyTitle="My Story"
+          storyTitle={storyTitle || "My Story"}
         />
 
-        {/* Continue Button (for parts/interactive mode) */}
-        {storyText && storyGenerationMode !== "full" && !isLoading && (
-          <div className="text-center mt-6">
-            <button
-              onClick={continueStory}
-              className="px-8 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg shadow-purple-600/30 inline-flex items-center gap-3"
-            >
-              <Send className="w-5 h-5" />
-              <span>Continue Story</span>
-            </button>
-          </div>
-        )}
-
-        {/* Reset Button */}
+        {/* Action Buttons */}
         {storyText && (
-          <div className="text-center mt-4">
+          <div className="flex flex-wrap justify-center gap-3 mt-6">
+            {/* Manual Save Button */}
+            <button
+              onClick={handleManualSave}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg inline-flex items-center gap-2"
+            >
+              <Save className="w-5 h-5" />
+              <span>Save Story</span>
+            </button>
+
+            {/* Continue Button (for parts/interactive mode) */}
+            {storyGenerationMode !== "full" && !isLoading && (
+              <button
+                onClick={continueStory}
+                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg shadow-purple-600/30 inline-flex items-center gap-2"
+              >
+                <Send className="w-5 h-5" />
+                <span>Continue Story</span>
+              </button>
+            )}
+
+            {/* Reset Button */}
             <button
               onClick={resetStory}
-              className="px-8 py-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg inline-flex items-center gap-3"
+              className="px-6 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all duration-300 text-white font-semibold shadow-lg inline-flex items-center gap-2"
             >
               <RotateCcw className="w-5 h-5" />
-              <span>Start New Story</span>
+              <span>New Story</span>
             </button>
           </div>
         )}
