@@ -37,6 +37,39 @@ const storyModes = {
   }
 };
 
+// Language to voice mapping for Murf API
+const LANGUAGE_VOICES = {
+  'en-US': { voiceId: 'en-US-ryan', name: 'English' },
+  'hi-IN': { voiceId: 'hi-IN-karan', name: 'Hindi' },
+  'es-ES': { voiceId: 'es-ES-antonio', name: 'Spanish' },
+  'fr-FR': { voiceId: 'fr-FR-antoine', name: 'French' },
+  'de-DE': { voiceId: 'de-DE-gisela', name: 'German' },
+  'ja-JP': { voiceId: 'ja-JP-kenji', name: 'Japanese' },
+  'zh-CN': { voiceId: 'zh-CN-xiaoxiao', name: 'Chinese' },
+  'pt-BR': { voiceId: 'pt-BR-giovanna', name: 'Portuguese' },
+  'ru-RU': { voiceId: 'ru-RU-pavel', name: 'Russian' },
+  'ar-SA': { voiceId: 'ar-SA-hamza', name: 'Arabic' },
+};
+
+// Preview texts for different languages
+const PREVIEW_TEXTS = {
+  'en-US': "Hey there! I'm your story teller and I will narrate different stories with your customization. Let's create something amazing together!",
+  'hi-IN': "नमस्ते! मैं आपका कहानीकार हूं और मैं आपकी पसंद के अनुसार अलग-अलग कहानियाँ सुनाऊंगा। आइए कुछ अद्भुत बनाएं!",
+  'es-ES': "¡Hola! Soy tu narrador de historias y narraré diferentes historias con tu personalización. ¡Creemos algo increíble juntos!",
+  'fr-FR': "Bonjour! Je suis votre conteur et je raconterai différentes histoires selon vos préférences. Créons quelque chose d'incroyable ensemble!",
+  'de-DE': "Hallo! Ich bin dein Geschichtenerzähler und erzähle verschiedene Geschichten nach deinen Wünschen. Lass uns etwas Erstaunliches erschaffen!",
+  'ja-JP': "こんにちは！私はあなたのストーリーテラーで、カスタマイズされたさまざまな物語をお届けします。一緒に素晴らしいものを作りましょう！",
+  'zh-CN': "你好！我是你的故事讲述者，我会根据你的定制讲述不同的故事。让我们一起创造惊人的东西吧！",
+  'pt-BR': "Olá! Sou seu contador de histórias e vou narrar diferentes histórias com sua personalização. Vamos criar algo incrível juntos!",
+  'ru-RU': "Привет! Я ваш рассказчик и буду рассказывать различные истории с вашей персонализацией. Давайте создадим что-то удивительное вместе!",
+  'ar-SA': "مرحباً! أنا راوي قصصك وسأروي قصصاً مختلفة حسب تخصيصك. دعنا نخلق شيئاً مذهلاً معاً!"
+};
+
+// Get language name from code
+function getLanguageName(code) {
+  return LANGUAGE_VOICES[code]?.name || 'English';
+}
+
 // Store chat sessions
 const chatSessions = new Map();
 
@@ -151,10 +184,12 @@ app.prepare().then(() => {
 
     socket.on("start-story", async (data) => {
       try {
-        const { transcript, mode, generationMode, voiceSettings } = data;
+        const { transcript, mode, generationMode, language, voiceSettings } = data;
+        
+        const languageName = getLanguageName(language || 'en-US');
         
         console.log(`\n📝 Received: "${transcript}"`);
-        console.log(`📖 Mode: ${mode} | Generation: ${generationMode}`);
+        console.log(`📖 Mode: ${mode} | Generation: ${generationMode} | Language: ${languageName}`);
         console.log(`🎤 Voice: ${voiceSettings.voiceId} | Speed: ${voiceSettings.speed} | Pitch: ${voiceSettings.pitch}`);
         
         // Get or create chat session
@@ -163,8 +198,9 @@ app.prepare().then(() => {
         if (!chat) {
           console.log("🆕 Creating new chat session...");
           
-          // Select system instruction based on generation mode
-          const systemInstruction = storyModes[generationMode][mode];
+          // Add language instruction to system prompt
+          const baseInstruction = storyModes[generationMode][mode];
+          const systemInstruction = `${baseInstruction} IMPORTANT: Generate the story in ${languageName} language.`;
           
           let model;
           for (const modelName of MODELS) {
@@ -210,9 +246,17 @@ app.prepare().then(() => {
         // Send to client
         socket.emit("story-text", { text: storyText });
 
+        // Use language-specific voice if custom voice not selected
+        const defaultVoice = LANGUAGE_VOICES[language || 'en-US']?.voiceId || 'en-US-ryan';
+        const finalVoiceSettings = {
+          voiceId: voiceSettings.voiceId || defaultVoice,
+          speed: voiceSettings.speed,
+          pitch: voiceSettings.pitch
+        };
+
         // Generate voice
         console.log("🎤 Generating voice...");
-        const audioUrl = await generateMurfVoice(storyText, voiceSettings);
+        const audioUrl = await generateMurfVoice(storyText, finalVoiceSettings);
         console.log("✅ Audio ready");
         socket.emit("audio-ready", { audioUrl });
 
@@ -236,7 +280,7 @@ app.prepare().then(() => {
     // Continue story handler (for parts/interactive mode)
     socket.on("continue-story", async (data) => {
       try {
-        const { mode, voiceSettings } = data;
+        const { mode, language, voiceSettings } = data;
         const chat = chatSessions.get(socket.id);
         
         if (!chat) {
@@ -244,7 +288,8 @@ app.prepare().then(() => {
           return;
         }
 
-        console.log("➡️ Continuing story...");
+        const languageName = getLanguageName(language || 'en-US');
+        console.log(`\n➡️ Continuing story in ${languageName}...`);
         
         const response = await generateWithFallback(chat, "Continue the story from where you left off.");
         const storyText = response.text();
@@ -253,7 +298,14 @@ app.prepare().then(() => {
         
         socket.emit("story-text", { text: storyText });
         
-        const audioUrl = await generateMurfVoice(storyText, voiceSettings);
+        const defaultVoice = LANGUAGE_VOICES[language || 'en-US']?.voiceId || 'en-US-ryan';
+        const finalVoiceSettings = {
+          voiceId: voiceSettings.voiceId || defaultVoice,
+          speed: voiceSettings.speed,
+          pitch: voiceSettings.pitch
+        };
+        
+        const audioUrl = await generateMurfVoice(storyText, finalVoiceSettings);
         socket.emit("audio-ready", { audioUrl });
         
       } catch (error) {
@@ -265,11 +317,14 @@ app.prepare().then(() => {
     // Preview voice handler
     socket.on("preview-voice", async (data) => {
       try {
-        const { voiceSettings } = data;
+        const { language, voiceSettings } = data;
+        const languageCode = language || 'en-US';
+        const languageName = getLanguageName(languageCode);
         
-        console.log(`\n🎤 Preview request: ${voiceSettings.voiceId}`);
+        console.log(`\n🎤 Preview request: ${voiceSettings.voiceId} (${languageName})`);
         
-        const previewText = "Hey there! I'm your story teller and I will narrate different stories with your customization. Let's create something amazing together!";
+        // Get preview text for the selected language
+        const previewText = PREVIEW_TEXTS[languageCode] || PREVIEW_TEXTS['en-US'];
         
         const audioUrl = await generateMurfVoice(previewText, voiceSettings);
         console.log("✅ Preview audio ready");
@@ -301,6 +356,7 @@ app.prepare().then(() => {
     .listen(port, () => {
       console.log(`\n🚀 Server ready on http://${hostname}:${port}`);
       console.log(`📡 Socket.IO ready`);
-      console.log(`🤖 Gemini AI with fallback models enabled\n`);
+      console.log(`🤖 Gemini AI with fallback models enabled`);
+      console.log(`🌍 Multi-language support enabled\n`);
     });
 });

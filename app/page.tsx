@@ -7,6 +7,7 @@ import ModeSelector from "./components/ModeSelector";
 import AudioPlayer from "./components/AudioPlayer";
 import VoiceSettings from "./components/VoiceSettings";
 import StoryModeDropdown from "./components/StoryModeDropdown";
+import LanguageSelector from "./components/LanguageSelector";
 import { Mic, MicOff, Send, RotateCcw, Wifi, WifiOff } from "lucide-react";
 
 export default function Home() {
@@ -27,6 +28,9 @@ export default function Home() {
   
   // Story generation mode
   const [storyGenerationMode, setStoryGenerationMode] = useState<"full" | "parts" | "interactive">("full");
+  
+  // Language
+  const [selectedLanguage, setSelectedLanguage] = useState("en-US");
   
   // Preview audio
   const [previewAudioUrl, setPreviewAudioUrl] = useState("");
@@ -102,7 +106,10 @@ export default function Home() {
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        recognition.lang = "en-US";
+        
+        // Set recognition language based on selected language
+        const langCode = selectedLanguage.split('-')[0]; // e.g., 'en' from 'en-US'
+        recognition.lang = selectedLanguage;
 
         recognition.onresult = (event: any) => {
           const transcriptText = event.results[0][0].transcript;
@@ -125,7 +132,7 @@ export default function Home() {
         recognitionRef.current = recognition;
       }
     }
-  }, [mode]);
+  }, [selectedLanguage]);
 
   const startListening = () => {
     if (recognitionRef.current) {
@@ -156,6 +163,7 @@ export default function Home() {
       transcript: text,
       mode: mode,
       generationMode: storyGenerationMode,
+      language: selectedLanguage,
       voiceSettings: {
         voiceId: selectedVoice,
         speed: voiceSpeed,
@@ -168,6 +176,7 @@ export default function Home() {
   const handlePreviewVoice = (voiceId: string, speed: number, pitch: number) => {
     console.log("🎤 Previewing voice:", voiceId);
     socket.emit("preview-voice", {
+      language: selectedLanguage,
       voiceSettings: {
         voiceId: voiceId,
         speed: speed,
@@ -180,6 +189,7 @@ export default function Home() {
     setIsLoading(true);
     socket.emit("continue-story", {
       mode: mode,
+      language: selectedLanguage,
       voiceSettings: {
         voiceId: selectedVoice,
         speed: voiceSpeed,
@@ -211,19 +221,29 @@ export default function Home() {
                 Transform your imagination into narrated stories
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {isConnected ? (
-                <Wifi className="w-5 h-5 text-green-400" />
-              ) : (
-                <WifiOff className="w-5 h-5 text-red-400" />
-              )}
-              <span
-                className={`text-sm font-medium ${
-                  isConnected ? "text-green-400" : "text-red-400"
-                }`}
-              >
-                {isConnected ? "Online" : "Offline"}
-              </span>
+            <div className="flex items-center gap-3">
+              {/* Language Selector */}
+              <LanguageSelector
+                value={selectedLanguage}
+                onChange={setSelectedLanguage}
+                disabled={isLoading}
+              />
+              
+              {/* Connection Status */}
+              <div className="flex items-center gap-2">
+                {isConnected ? (
+                  <Wifi className="w-5 h-5 text-green-400" />
+                ) : (
+                  <WifiOff className="w-5 h-5 text-red-400" />
+                )}
+                <span
+                  className={`text-sm font-medium ${
+                    isConnected ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {isConnected ? "Online" : "Offline"}
+                </span>
+              </div>
             </div>
           </div>
           
